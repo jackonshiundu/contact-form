@@ -1,17 +1,26 @@
 <?php
+//composer require phpmailer/phpmailer
+
 // Database configuration
 $db_host = 'localhost';
 $db_user = 'root';
 $db_pass = '';
-$db_name = 'projects';
+$db_name = 'john_doe';
 
 // Initialize variables
 $name = $email = $subject = $message = '';
 $errors = [];
 $success = false;
 
+// Load PHPMailer classes
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\Exception;
+
+require 'vendor/autoload.php'; // Make sure this path is correct
+
 // Process form when submitted
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+
     // Sanitize inputs
     $name = sanitize_input($_POST['name'] ?? '');
     $email = sanitize_input($_POST['email'] ?? '');
@@ -37,24 +46,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors['message'] = 'Message is required';
     }
 
-    // If no errors, save to database
     if (empty($errors)) {
+        // Save to database
         $conn = new mysqli($db_host, $db_user, $db_pass, $db_name);
-
         if ($conn->connect_error) {
             die("Connection failed: " . $conn->connect_error);
         }
 
-        // Prepare statement to prevent SQL injection
-        $stmt = $conn->prepare("INSERT INTO contact_messages (name, email, subject, message) VALUES (?, ?, ?, ?)");
+        $stmt = $conn->prepare("INSERT INTO contact (name, email, subject, message) VALUES (?, ?, ?, ?)");
         $stmt->bind_param("ssss", $name, $email, $subject, $message);
 
         if ($stmt->execute()) {
-            $success = true;
-            // Clear form fields
-            $name = $email = $subject = $message = '';
+            // Send email via Gmail SMTP
+            $mail = new PHPMailer(true);
+            try {
+                //Server settings
+                $mail->isSMTP();
+                $mail->Host       = 'smtp.gmail.com';
+                $mail->SMTPAuth   = true;
+                $mail->Username   = 'jackonshiundu2019@gmail.com';     // Your Gmail address
+                $mail->Password   = 'depeunrrwvzuaeic';                 // Your app password WITHOUT spaces
+                $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+                $mail->Port       = 587;
+
+                //Recipients
+                $mail->setFrom('jackonshiundu2019@gmail.com', 'Website Contact Form');
+                $mail->addAddress('jackonshiundu2019@gmail.com', 'Jackon Shiundu');
+
+                // Content
+                $mail->isHTML(true);
+                $mail->Subject = $subject;
+                $mail->Body    = "<p><strong>Name:</strong> {$name}</p>
+                                  <p><strong>Email:</strong> {$email}</p>
+                                  <p><strong>Email:</strong> {$subject}</p>
+                                  <p><strong>Message:</strong><br>" . nl2br(htmlspecialchars($message)) . "</p>";
+                $mail->AltBody = "Name: $name\nEmail: $email\nMessage:\n$message";
+
+                $mail->send();
+                $success = true;
+            } catch (Exception $e) {
+                $errors['email_send'] = "Mailer Error: {$mail->ErrorInfo}";
+            }
         } else {
-            $errors['database'] = 'Error saving message: ' . $conn->error;
+            $errors['database'] = 'Error saving to database: ' . $conn->error;
         }
 
         $stmt->close();
@@ -64,18 +98,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // Function to sanitize input
 function sanitize_input($data) {
-    $data = trim($data);
-    $data = stripslashes($data);
-    $data = htmlspecialchars($data);
-    return $data;
+    return htmlspecialchars(stripslashes(trim($data)));
 }
 ?>
 
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Contact Us</title>
     <style>
         .error { color: red; }
@@ -100,10 +131,14 @@ function sanitize_input($data) {
         <p class="error"><?php echo $errors['database']; ?></p>
     <?php endif; ?>
 
-    <form action="contact.php" method="post">
+    <?php if (isset($errors['email_send'])): ?>
+        <p class="error"><?php echo $errors['email_send']; ?></p>
+    <?php endif; ?>
+
+    <form action="contact_us.php" method="post">
         <div class="form-group">
             <label for="name">Name:</label>
-            <input type="text" id="name" name="name" value="<?php echo htmlspecialchars($name); ?>">
+            <input type="text" id="name" name="name" value="<?php echo htmlspecialchars($name); ?>" />
             <?php if (isset($errors['name'])): ?>
                 <span class="error"><?php echo $errors['name']; ?></span>
             <?php endif; ?>
@@ -111,7 +146,7 @@ function sanitize_input($data) {
 
         <div class="form-group">
             <label for="email">Email:</label>
-            <input type="email" id="email" name="email" value="<?php echo htmlspecialchars($email); ?>">
+            <input type="email" id="email" name="email" value="<?php echo htmlspecialchars($email); ?>" />
             <?php if (isset($errors['email'])): ?>
                 <span class="error"><?php echo $errors['email']; ?></span>
             <?php endif; ?>
@@ -119,7 +154,7 @@ function sanitize_input($data) {
 
         <div class="form-group">
             <label for="subject">Subject:</label>
-            <input type="text" id="subject" name="subject" value="<?php echo htmlspecialchars($subject); ?>">
+            <input type="text" id="subject" name="subject" value="<?php echo htmlspecialchars($subject); ?>" />
             <?php if (isset($errors['subject'])): ?>
                 <span class="error"><?php echo $errors['subject']; ?></span>
             <?php endif; ?>
